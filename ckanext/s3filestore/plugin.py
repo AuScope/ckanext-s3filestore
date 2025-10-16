@@ -6,9 +6,7 @@ import six
 from ckan import plugins
 import ckantoolkit as toolkit
 from ckanext.s3filestore import uploader as s3_uploader
-from ckan.lib.uploader import get_resource_uploader, \
-    ResourceUpload as DefaultResourceUpload
-
+from ckan.lib.uploader import get_resource_uploader as core_get_uploader
 
 import ckanext.s3filestore.tasks as tasks
 
@@ -25,11 +23,8 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IPackageController, inherit=True)
     plugins.implements(plugins.IResourceController, inherit=True)
 
-    if toolkit.check_ckan_version(min_version='2.9.0'):
-        plugins.implements(plugins.IBlueprint)
-        plugins.implements(plugins.IClick)
-    else:
-        plugins.implements(plugins.IRoutes, inherit=True)
+    plugins.implements(plugins.IBlueprint)
+    plugins.implements(plugins.IClick)
 
     # IConfigurer
 
@@ -82,16 +77,11 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
 
     # IPackageController
 
-    # CKAN < 2.10
-    def after_update(self, context, pkg_dict):
-        return self.after_dataset_update(context, pkg_dict)
-
-    # CKAN >= 2.10
     def after_dataset_update(self, context, pkg_dict):
         ''' Update the access of each S3 object to match the package.
         '''
         pkg_id = pkg_dict['id']
-        LOG.debug("after_update: Package %s has been updated, notifying resources", pkg_id)
+        LOG.debug("after_dataset_update: Package %s has been updated, notifying resources", pkg_id)
 
         is_private = pkg_dict.get('private', False)
         is_private_str = six.text_type(is_private)
@@ -112,7 +102,7 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
             try:
                 self.enqueue_resource_visibility_update_job(visibility_level, pkg_id)
             except Exception as e:
-                LOG.debug("after_update: Failed to enqueue, updating inline. Error: [%s]", e)
+                LOG.debug("after_dataset_update: Failed to enqueue, updating inline. Error: [%s]", e)
                 async_update = False
         if not async_update:
             if 'resources' not in pkg_dict:
@@ -127,7 +117,7 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
             if 'id' not in resource:
                 # skip new resources as they would already have correct visibility
                 continue
-            uploader = get_resource_uploader(resource)
+            uploader = core_get_uploader(resource)
             if hasattr(uploader, 'update_visibility'):
                 uploader.update_visibility(
                     resource['id'],
@@ -141,14 +131,12 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
             'title': "s3_afterUpdatePackage: setting {} on {}".format(visibility_level, pkg_id),
             'kwargs': {'visibility_level': visibility_level, 'pkg_id': pkg_id},
         }
-        if toolkit.check_ckan_version('2.8'):
-            ttl = 24 * 60 * 60  # 24 hour ttl.
-            rq_kwargs = {
-                'ttl': ttl
-            }
-            if toolkit.check_ckan_version('2.9'):
-                rq_kwargs['failure_ttl'] = ttl
-            enqueue_args['rq_kwargs'] = rq_kwargs
+        ttl = 24 * 60 * 60  # 24 hour ttl.
+        rq_kwargs = {
+            'ttl': ttl,
+            'failure_ttl': ttl
+        }
+        enqueue_args['rq_kwargs'] = rq_kwargs
 
         # Optional variable, if not set, default queue is used
         queue = toolkit.config.get('ckanext.s3filestore.queue', None)
@@ -158,6 +146,8 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
         toolkit.enqueue_job(**enqueue_args)
         LOG.debug("enqueue_resource_visibility_update_job: Package %s has been enqueued",
                   pkg_id)
+
+    # IResourceController
 
     def before_resource_delete(self, context, resource_id_dict, resources):
         """
@@ -174,43 +164,7 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
         else:
             LOG.error("Unable to find target resource [%s] for deletion", resource_id)
 
-    # IRoutes
-    # Ignored on CKAN >= 2.9
-
-    def before_map(self, map):
-        from routes.mapper import SubMapper
-
-        with SubMapper(map, controller='ckanext.s3filestore.controller:S3Controller') as m:
-            # IUploader interface does not handle download, like qgov version does, override core ckan controllers
-            if not hasattr(DefaultResourceUpload, 'download'):
-                # Override the resource download links
-                m.connect('s3_resource.resource_download',
-                          '/dataset/{id}/resource/{resource_id}/download',
-                          action='resource_download')
-                m.connect('s3_resource.resource_download',
-                          '/dataset/{id}/resource/{resource_id}/download/{filename}',
-                          action='resource_download')
-
-            # fallback controller action to download from the filesystem
-            m.connect('s3_resource.filesystem_resource_download',
-                      '/dataset/{id}/resource/{resource_id}/fs_download/{filename}',
-                      action='filesystem_resource_download')
-
-            # Allow fallback to access old files
-            use_filename = toolkit.asbool(toolkit.config.get('ckanext.s3filestore.use_filename', False))
-            if not use_filename:
-                m.connect('s3_resource.resource_download',
-                          '/dataset/{id}/resource/{resource_id}/orig_download/{filename}',
-                          action='resource_download')
-
-            # Intercept the uploaded file links (e.g. group images)
-            m.connect('uploaded_file', '/uploads/{upload_to}/{filename}',
-                      action='uploaded_file_redirect')
-
-        return map
-
     # IBlueprint
-    # Ignored on CKAN < 2.9
 
     def get_blueprint(self):
         from ckanext.s3filestore.views import\
@@ -218,7 +172,6 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
         return resource.get_blueprints() + uploads.get_blueprints()
 
     # IClick
-    # Ignored on CKAN < 2.9
 
     def get_commands(self):
         from ckanext.s3filestore import click_commands

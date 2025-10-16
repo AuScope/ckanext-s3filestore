@@ -41,11 +41,11 @@ class TestS3Plugin():
         with mock.patch('ckanext.s3filestore.plugin.toolkit') as mock_toolkit:
             mock_toolkit.get_action.return_value = lambda **kwargs: [] if 'limit' in kwargs['data_dict'] else pkg_dict
             mock_uploader = mock.MagicMock()
-            with mock.patch('ckanext.s3filestore.plugin.get_resource_uploader') as mock_get_uploader:
+            with mock.patch('ckanext.s3filestore.plugin.core_get_uploader') as mock_get_uploader:
                 mock_get_uploader.return_value = mock_uploader
                 mock_uploader.update_visibility = mock.MagicMock()
 
-                self.plugin.after_update({}, pkg_dict)
+                self.plugin.after_dataset_update({}, pkg_dict)
                 mock_uploader.update_visibility.assert_called_once_with(
                     'test-resource', target_acl=expected_acl)
 
@@ -71,20 +71,11 @@ class TestS3Plugin():
                     from ckan.lib.jobs import DEFAULT_JOB_TIMEOUT
                     timeout = DEFAULT_JOB_TIMEOUT
 
-                if toolkit.check_ckan_version('2.9'):
-                    enqueue_call.assert_called_once_with(
-                        func=tasks.s3_afterUpdatePackage,
-                        args=[],
-                        kwargs={'visibility_level': 'private', 'pkg_id': 'abcde'},
-                        timeout=timeout,
-                        ttl=86400,
-                        failure_ttl=86400
-                    )
-                else:
-                    enqueue_call.assert_called_once_with(
-                        func=tasks.s3_afterUpdatePackage,
-                        args=[],
-                        kwargs={'visibility_level': 'private', 'pkg_id': 'abcde'},
-                        timeout=timeout,
-                        ttl=86400
-                    )
+                enqueue_call.assert_called_once_with(
+                    func=tasks.s3_afterUpdatePackage,
+                    args=[],
+                    kwargs={'visibility_level': 'private', 'pkg_id': 'abcde'},
+                    timeout=timeout,
+                    ttl=86400,
+                    failure_ttl=86400
+                )

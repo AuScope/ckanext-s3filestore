@@ -187,87 +187,55 @@ class TestS3Controller(object):
         image = requests.get(location)
         assert image.content == b"\0\0\0"
 
-    if toolkit.check_ckan_version('2.9'):
-
-        def _get_expecting_redirect(self, url, app=None):
-            if url.startswith('http:') or url.startswith('https:'):
-                site_url = config.get('ckan.site_url')
-                url = url.replace(site_url, '')
-            if not app:
-                app = helpers._get_test_app()
-            response = app.get(url, follow_redirects=False)
-            status_code = _get_status_code(response)
-            assert status_code in [301, 302], \
-                "%s resulted in %s instead of a redirect" % (url, response.status)
-            return status_code, response.location
-
-        def test_resource_download(self):
-            u'''When trying to download resource
-            from CKAN it should redirect to S3.'''
-            resource_with_upload = self._upload_resource()
-
-            status_code, location = self._get_expecting_redirect(
-                url_for(
-                    u'dataset_resource.download',
-                    id=resource_with_upload[u'package_id'],
-                    resource_id=resource_with_upload[u'id'],
-                )
-            )
-            assert 302 == status_code
-
-        def test_resource_download_not_found(self):
-            u'''Downloading a nonexistent resource gives HTTP 404.'''
-
+    def _get_expecting_redirect(self, url, app=None):
+        if url.startswith('http:') or url.startswith('https:'):
+            site_url = config.get('ckan.site_url')
+            url = url.replace(site_url, '')
+        if not app:
             app = helpers._get_test_app()
-            response = app.get(
-                url_for(
-                    u'dataset_resource.download',
-                    id=u'package_id',
-                    resource_id=u'resource_id',
-                )
+        response = app.get(url, follow_redirects=False)
+        status_code = _get_status_code(response)
+        assert status_code in [301, 302], \
+            "%s resulted in %s instead of a redirect" % (url, response.status)
+        return status_code, response.location
+
+    def test_resource_download(self):
+        u'''When trying to download resource
+        from CKAN it should redirect to S3.'''
+        resource_with_upload = self._upload_resource()
+
+        status_code, location = self._get_expecting_redirect(
+            url_for(
+                u'dataset_resource.download',
+                id=resource_with_upload[u'package_id'],
+                resource_id=resource_with_upload[u'id'],
             )
-            assert 404 == _get_status_code(response)
+        )
+        assert 302 == status_code
 
-        def test_s3_download_link(self):
-            u'''A resource download from s3 test.'''
-            resource_with_upload = self._upload_resource()
+    def test_resource_download_not_found(self):
+        u'''Downloading a nonexistent resource gives HTTP 404.'''
 
-            status_code, location = self._get_expecting_redirect(
-                url_for(
-                    u'dataset_resource.download',
-                    id=resource_with_upload[u'package_id'],
-                    resource_id=resource_with_upload[u'id'],
-                )
+        app = helpers._get_test_app()
+        response = app.get(
+            url_for(
+                u'dataset_resource.download',
+                id=u'package_id',
+                resource_id=u'resource_id',
             )
-            file_response = requests.get(location)
-            assert 'date,price' in _get_response_body(file_response)
+        )
+        assert 404 == _get_status_code(response)
 
-    else:
+    def test_s3_download_link(self):
+        u'''A resource download from s3 test.'''
+        resource_with_upload = self._upload_resource()
 
-        def _get_expecting_redirect(self, url, app=None):
-            if url.startswith('http:') or url.startswith('https:'):
-                site_url = config.get('ckan.site_url')
-                url = url.replace(site_url, '')
-            if not app:
-                app = helpers._get_test_app()
-            response = app.get(url)
-            status_code = _get_status_code(response)
-            assert status_code in [301, 302], \
-                "%s resulted in %s instead of a redirect" % (url, response.status)
-            return status_code, response.headers['Location']
-
-        def test_resource_upload_with_url_and_clear(self):
-            '''Test that clearing an upload and using a URL does not crash'''
-            dataset = factories.Dataset(name="my-dataset")
-
-            url = toolkit.url_for(controller='package', action='new_resource',
-                                  id=dataset['id'])
-            env = {'REMOTE_USER': self.sysadmin['name'].encode('ascii')}
-
-            helpers._get_test_app().post(
-                url,
-                {'clear_upload': True,
-                 'id': '',    # Empty id from the form
-                 'url': 'http://asdf', 'save': 'save'},
-                headers={'Authorization': 'my-test-key'},
-                extra_environ=env)
+        status_code, location = self._get_expecting_redirect(
+            url_for(
+                u'dataset_resource.download',
+                id=resource_with_upload[u'package_id'],
+                resource_id=resource_with_upload[u'id'],
+            )
+        )
+        file_response = requests.get(location)
+        assert 'date,price' in _get_response_body(file_response)

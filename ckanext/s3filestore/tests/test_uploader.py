@@ -154,23 +154,12 @@ class TestS3Uploader():
             # passed
             assert True, "passed"
 
-    if toolkit.check_ckan_version('2.9'):
-
-        def _get_expecting_redirect(self, app, url):
-            response = app.get(url, follow_redirects=False)
-            status_code = _get_status_code(response)
-            assert status_code in [301, 302], \
-                "%s resulted in %s instead of a redirect" % (url, status_code)
-            return status_code, response.location
-
-    else:
-
-        def _get_expecting_redirect(self, app, url):
-            response = app.get(url)
-            status_code = _get_status_code(response)
-            assert status_code in [301, 302], \
-                "%s resulted in %s instead of a redirect" % (url, status_code)
-            return status_code, response.headers['Location']
+    def _get_expecting_redirect(self, app, url):
+        response = app.get(url, follow_redirects=False)
+        status_code = _get_status_code(response)
+        assert status_code in [301, 302], \
+            "%s resulted in %s instead of a redirect" % (url, status_code)
+        return status_code, response.location
 
 
 class TestS3ResourceUploader():
