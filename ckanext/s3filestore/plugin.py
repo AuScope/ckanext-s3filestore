@@ -23,6 +23,7 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
     plugins.implements(plugins.IConfigurable)
     plugins.implements(plugins.IUploader)
     plugins.implements(plugins.IPackageController, inherit=True)
+    plugins.implements(plugins.IResourceController, inherit=True)
 
     if toolkit.check_ckan_version(min_version='2.9.0'):
         plugins.implements(plugins.IBlueprint)
@@ -71,9 +72,9 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
 
     # IUploader
 
-    def get_resource_uploader(self, data_dict):
+    def get_resource_uploader(self, resource_dict):
         '''Return an uploader object used to upload resource files.'''
-        return s3_uploader.S3ResourceUploader(data_dict)
+        return s3_uploader.S3ResourceUploader(resource_dict)
 
     def get_uploader(self, upload_to, old_filename=None):
         '''Return an uploader object used to upload general files.'''
@@ -157,6 +158,21 @@ class S3FileStorePlugin(plugins.SingletonPlugin):
         toolkit.enqueue_job(**enqueue_args)
         LOG.debug("enqueue_resource_visibility_update_job: Package %s has been enqueued",
                   pkg_id)
+
+    def before_resource_delete(self, context, resource_id_dict, resources):
+        """
+        Delete the stored file from S3 when the CKAN resource is deleted.
+
+        Ideally this would occur after the CKAN deletion is complete,
+        but the 'after_resource_delete' hook doesn't give us the ID.
+        """
+        resource_id = resource_id_dict.get('id')
+        for resource in resources:
+            if resource.get('id') == resource_id:
+                s3_uploader.S3ResourceUploader(resource).delete(resource_id)
+                return
+        else:
+            LOG.error("Unable to find target resource [%s] for deletion", resource_id)
 
     # IRoutes
     # Ignored on CKAN >= 2.9
