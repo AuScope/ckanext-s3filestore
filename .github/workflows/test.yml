@@ -43,11 +43,6 @@ jobs:
             ckan-git-org: 'qld-gov-au'
             solr-version: 8
             experimental: false
-          - ckan-version: '2.9'
-            ckan-git-version: 'ckan-2.9.9-qgov.4'
-            ckan-git-org: 'qld-gov-au'
-            solr-version: 8
-            experimental: false
           - ckan-version: 'master'
             ckan-git-org: 'ckan'
             ckan-git-version: 'master'
@@ -116,6 +111,7 @@ jobs:
         timeout-minutes: 30
 
       - name: Test Summary
+        continue-on-error: ${{ matrix.experimental }}
         uses: test-summary/action@v2
         with:
           paths: "/tmp/junit/results.xml"
