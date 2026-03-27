@@ -674,14 +674,16 @@ class S3ResourceUploader(BaseS3Uploader):
         ''' Retrieve a dict of metadata about the resource,
         to be added to the S3 object.
         '''
-        username = g.user if 'user' in dir(g) else '__anonymous__'
-        package = self._get_package()
-        metadata = {
-            'package_' + field: ensure_ascii(package[field]) for field in package.keys()
-            if field != 'notes' and isinstance(package[field], six.string_types)
-        }
-        metadata['uploaded_by'] = ensure_ascii(username)
-        return metadata
+        # For now we are not adding any metadata, but this is where you would add
+        return {}
+        # username = g.user if 'user' in dir(g) else '__anonymous__'
+        # package = self._get_package()
+        # metadata = {
+        #     'package_' + field: ensure_ascii(package[field]) for field in package.keys()
+        #     if field != 'notes' and isinstance(package[field], six.string_types)
+        # }
+        # metadata['uploaded_by'] = ensure_ascii(username)
+        # return metadata
 
     def delete(self, id, filename=None):
         ''' Delete file we are pointing at'''
